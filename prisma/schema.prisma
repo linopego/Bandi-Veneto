@@ -1,0 +1,93 @@
+// Schema Bandi Veneto
+// docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Una pubblicazione (bando, avviso, concorso) raccolta da una delle fonti.
+model Bando {
+  id       String @id @default(cuid())
+  /// Hash stabile di (fonte + url + titolo): chiave di deduplica fra run.
+  sourceId String @unique
+
+  fonte String // slug dello scraper, es. "bandi-veneto-tipo1"
+  tipo  String // "Bando e Finanziamento" | "Avviso" | "Concorso e Stage" | ...
+
+  titolo      String
+  ente        String?
+  descrizione String?
+  url         String
+
+  dataPubblicazione DateTime?
+  dataScadenza      DateTime?
+
+  importo     String?
+  beneficiari String?
+  categorie   String[] @default([])
+
+  /// Punteggio 0-5 assegnato dal modello, null finché non è stato valutato.
+  rilevanza       Int?
+  rilevanzaMotivo String?
+
+  /// Hash dei campi significativi: se cambia, il record è stato aggiornato alla fonte.
+  contentHash String
+
+  primoRilevamento DateTime  @default(now())
+  ultimaModifica   DateTime  @updatedAt
+  /// Valorizzato quando il bando è già stato incluso in un digest: evita reinvii.
+  notificatoIl     DateTime?
+  archiviato       Boolean   @default(false)
+
+  modifiche BandoModifica[]
+
+  @@index([fonte])
+  @@index([tipo])
+  @@index([dataScadenza])
+  @@index([rilevanza])
+  @@index([archiviato, dataScadenza])
+  @@index([primoRilevamento])
+}
+
+/// Storico per campo: alimenta la pagina di dettaglio e la voce "AGGIORNATO" del digest.
+model BandoModifica {
+  id      String @id @default(cuid())
+  bandoId String
+  bando   Bando  @relation(fields: [bandoId], references: [id], onDelete: Cascade)
+
+  campo       String // nome del campo cambiato, es. "dataScadenza"
+  valorePrima String?
+  valoreDopo  String?
+  rilevatoIl  DateTime @default(now())
+
+  @@index([bandoId, rilevatoIl])
+}
+
+enum EsitoScrape {
+  OK
+  PARZIALE
+  ERRORE
+}
+
+/// Un tentativo di scraping per singola fonte: serve ad accorgersi che un parser si è rotto.
+model ScrapeRun {
+  id             String      @id @default(cuid())
+  timestamp      DateTime    @default(now())
+  fonte          String
+  esito          EsitoScrape
+  /// Quante voci ha visto il parser in totale (0 con esito OK = parser probabilmente rotto).
+  totaliTrovati  Int         @default(0)
+  nuoviTrovati   Int         @default(0)
+  aggiornati     Int         @default(0)
+  paginePercorse Int         @default(0)
+  durataMs       Int         @default(0)
+  errore         String?
+
+  @@index([timestamp])
+  @@index([fonte, timestamp])
+}
