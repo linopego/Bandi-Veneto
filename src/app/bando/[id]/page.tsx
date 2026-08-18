@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatData, formatDataOra } from "@/lib/format";
+import { diagnosiDatabase } from "@/lib/diagnostica";
+import { ErroreDatabase } from "@/components/errore-database";
 import { prisma } from "@/lib/prisma";
 
 /** Dettaglio di un bando, con lo storico delle modifiche rilevate alla fonte. */
@@ -39,10 +41,15 @@ function valoreLeggibile(campo: string, valore: string | null): string {
 export default async function DettaglioBando({ params }: PageProps<"/bando/[id]">) {
   const { id } = await params;
 
-  const bando = await prisma.bando.findUnique({
-    where: { id },
-    include: { modifiche: { orderBy: { rilevatoIl: "desc" } } },
-  });
+  let bando;
+  try {
+    bando = await prisma.bando.findUnique({
+      where: { id },
+      include: { modifiche: { orderBy: { rilevatoIl: "desc" } } },
+    });
+  } catch (errore) {
+    return <ErroreDatabase diagnosi={diagnosiDatabase(errore)} />;
+  }
 
   if (!bando) notFound();
 

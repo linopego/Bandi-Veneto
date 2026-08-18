@@ -205,6 +205,11 @@ corpo è una riga sola. HTML a tabella con `max-width`, leggibile da mobile.
    `DIGEST_TO`, `CRON_SECRET` e, se serve, `SCRAPER_CONTACT`.
 3. Deploy. Lo script `postinstall` esegue `prisma generate` a ogni build.
 
+Il build **non** richiede nessuna variabile d'ambiente: il client Prisma viene
+costruito alla prima query, non all'import dei moduli. `DATABASE_URL` serve al
+runtime — se manca, il build passa ma le pagine mostrano "Database non
+disponibile".
+
 Il `build` non applica le migrazioni: vanno lanciate a mano con
 `prisma migrate deploy` quando lo schema cambia, così un deploy non altera mai
 il database da solo.
@@ -232,6 +237,30 @@ Vercel chiama l'endpoint con `Authorization: Bearer $CRON_SECRET`, che è quello
 che `/api/cron/scrape` verifica. Sul piano Hobby i cron sono giornalieri e
 l'orario è approssimativo.
 
+### 5. Verifica che il deploy sia a posto
+
+```
+https://<il-tuo-progetto>.vercel.app/api/health
+```
+
+Risponde con l'elenco delle variabili d'ambiente presenti (solo presente/assente,
+mai i valori) e con lo stato del database. Restituisce `200` se
+`DATABASE_URL` e `CRON_SECRET` ci sono e il database risponde, `503` altrimenti,
+indicando cosa fare:
+
+| Stato | Cosa significa |
+|---|---|
+| `non configurato` | `DATABASE_URL` non è impostata fra le Environment Variables. |
+| `schema mancante` | Il database risponde ma le tabelle non ci sono: manca `prisma migrate deploy`. |
+| `irraggiungibile` | Connection string sbagliata, o progetto Neon sospeso. |
+
+Aggiungendo `?secret=<CRON_SECRET>` viene incluso anche il messaggio d'errore
+originale del database, che altrimenti resta nascosto perché può contenere host
+e nomi utente.
+
+Se una pagina della dashboard non riesce a leggere dal database non restituisce
+un 500 muto: mostra lo stato rilevato e il passo da fare.
+
 ---
 
 ## Struttura
@@ -246,6 +275,7 @@ src/lib/
   scoring.ts                  punteggio di rilevanza via API Anthropic
   digest.ts                   costruzione e invio del digest
   format.ts                   formattazioni condivise
+  diagnostica.ts              errori del database tradotti in cosa fare
   scrapers/
     types.ts                  interfaccia comune a tutte le fonti
     index.ts                  registro delle fonti attive
@@ -257,6 +287,7 @@ src/app/
   bando/[id]/page.tsx         dettaglio e storico modifiche
   runs/page.tsx               esito degli scraping
   api/cron/scrape/route.ts    endpoint del cron, protetto da CRON_SECRET
+  api/health/route.ts         diagnostica del deploy: variabili e stato del DB
 scripts/
   scrape-local.ts             runner da riga di comando
   serve-fixture.ts            finto portale per lo sviluppo in locale

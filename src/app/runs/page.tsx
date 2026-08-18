@@ -9,6 +9,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDataOra } from "@/lib/format";
+import { diagnosiDatabase } from "@/lib/diagnostica";
+import { ErroreDatabase } from "@/components/errore-database";
 import { prisma } from "@/lib/prisma";
 import { scrapers } from "@/lib/scrapers";
 
@@ -29,7 +31,9 @@ function VariantEsito({ esito }: { esito: string }) {
 }
 
 export default async function Runs() {
-  const [runs, ultimiPerFonte] = await Promise.all([
+  let runs, ultimiPerFonte;
+  try {
+    [runs, ultimiPerFonte] = await Promise.all([
     prisma.scrapeRun.findMany({ orderBy: { timestamp: "desc" }, take: 100 }),
     Promise.all(
       scrapers.map(async (scraper) => ({
@@ -43,8 +47,11 @@ export default async function Runs() {
           orderBy: { timestamp: "desc" },
         }),
       })),
-    ),
-  ]);
+      ),
+    ]);
+  } catch (errore) {
+    return <ErroreDatabase diagnosi={diagnosiDatabase(errore)} />;
+  }
 
   return (
     <div className="flex flex-col gap-6">

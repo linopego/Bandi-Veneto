@@ -15,6 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatData } from "@/lib/format";
+import { diagnosiDatabase } from "@/lib/diagnostica";
+import { ErroreDatabase } from "@/components/errore-database";
 import { prisma } from "@/lib/prisma";
 import { scrapers } from "@/lib/scrapers";
 
@@ -101,19 +103,26 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
   const where = costruisciWhere(params);
 
-  const [bandi, tipiDistinti, totaleArchiviati] = await Promise.all([
-    prisma.bando.findMany({
-      where,
-      orderBy: [{ rilevanza: "desc" }, { dataScadenza: "asc" }],
-      take: 200,
-    }),
-    prisma.bando.findMany({
-      distinct: ["tipo"],
-      select: { tipo: true },
-      orderBy: { tipo: "asc" },
-    }),
-    prisma.bando.count({ where: { archiviato: true } }),
-  ]);
+  // Se il database non risponde la pagina spiega cosa manca invece di
+  // restituire un 500 muto: al primo deploy è quasi sempre configurazione.
+  let bandi, tipiDistinti, totaleArchiviati;
+  try {
+    [bandi, tipiDistinti, totaleArchiviati] = await Promise.all([
+      prisma.bando.findMany({
+        where,
+        orderBy: [{ rilevanza: "desc" }, { dataScadenza: "asc" }],
+        take: 200,
+      }),
+      prisma.bando.findMany({
+        distinct: ["tipo"],
+        select: { tipo: true },
+        orderBy: { tipo: "asc" },
+      }),
+      prisma.bando.count({ where: { archiviato: true } }),
+    ]);
+  } catch (errore) {
+    return <ErroreDatabase diagnosi={diagnosiDatabase(errore)} />;
+  }
 
   const archiviatiAttivo = params.archiviati === "1";
 
